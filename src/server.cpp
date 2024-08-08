@@ -85,6 +85,11 @@ int main(int argc, char **argv) {
   std::string message;
   if (path == "/") {
     message = "HTTP/1.1 200 OK\r\n\r\n";
+  } else if (path.find("/echo/") == 0) {
+    std::string echo = path.substr(6);
+    message =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
+        std::to_string(echo.length()) + "\r\n\r\n" + echo;
   } else {
     message = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
