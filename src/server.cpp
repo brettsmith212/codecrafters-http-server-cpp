@@ -7,6 +7,7 @@
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -24,6 +25,46 @@ std::vector<std::string> stringToVec(std::string &buffer, char delimiter) {
   }
 
   return linesVec;
+}
+
+void handleClient(int client_fd) {
+  char buffer[BUFFER_SIZE];
+  std::memset(buffer, 0, sizeof(buffer));
+
+  read(client_fd, buffer, BUFFER_SIZE);
+
+  std::string bufferStr = buffer;
+  std::vector<std::string> headerLines = stringToVec(bufferStr, '\r');
+
+  std::vector<std::string> headerRowVec = stringToVec(headerLines[0], ' ');
+
+  std::string path = headerRowVec[1];
+
+  std::string message;
+  if (path == "/") {
+    message = "HTTP/1.1 200 OK\r\n\r\n";
+  } else if (path.find("/echo/") == 0) {
+    std::string echo = path.substr(6);
+    message =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
+        std::to_string(echo.length()) + "\r\n\r\n" + echo;
+  } else if (path.find("/user-agent") == 0) {
+    std::string userAgentRow = "";
+    for (const auto &line : headerLines) {
+      if (line.find("\nUser-Agent:") == 0) {
+        userAgentRow = line;
+      }
+    }
+    std::vector<std::string> userAgentLine = stringToVec(userAgentRow, ' ');
+    std::string userAgent = userAgentLine[1];
+    message =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
+        std::to_string(userAgent.length()) + "\r\n\r\n" + userAgent;
+  } else {
+    message = "HTTP/1.1 404 Not Found\r\n\r\n";
+  }
+
+  send(client_fd, message.c_str(), message.length(), 0);
 }
 
 int main(int argc, char **argv) {
@@ -66,47 +107,13 @@ int main(int argc, char **argv) {
 
   std::cout << "Waiting for a client to connect...\n";
 
-  int client = accept(server_fd, (struct sockaddr *)&client_addr,
-                      (socklen_t *)&client_addr_len);
-  std::cout << "Client connected\n";
+  while (true) {
+    int client = accept(server_fd, (struct sockaddr *)&client_addr,
+                        (socklen_t *)&client_addr_len);
+    std::cout << "Client connected\n";
 
-  char buffer[BUFFER_SIZE];
-  std::memset(buffer, 0, sizeof(buffer));
-
-  read(client, buffer, BUFFER_SIZE);
-
-  std::string bufferStr = buffer;
-  std::vector<std::string> headerLines = stringToVec(bufferStr, '\r');
-
-  std::vector<std::string> headerRowVec = stringToVec(headerLines[0], ' ');
-
-  std::string path = headerRowVec[1];
-
-  std::string message;
-  if (path == "/") {
-    message = "HTTP/1.1 200 OK\r\n\r\n";
-  } else if (path.find("/echo/") == 0) {
-    std::string echo = path.substr(6);
-    message =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-        std::to_string(echo.length()) + "\r\n\r\n" + echo;
-  } else if (path.find("/user-agent") == 0) {
-    std::string userAgentRow = "";
-    for (const auto &line : headerLines) {
-      if (line.find("\nUser-Agent:") == 0) {
-        userAgentRow = line;
-      }
-    }
-    std::vector<std::string> userAgentLine = stringToVec(userAgentRow, ' ');
-    std::string userAgent = userAgentLine[1];
-    message =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-        std::to_string(userAgent.length()) + "\r\n\r\n" + userAgent;
-  } else {
-    message = "HTTP/1.1 404 Not Found\r\n\r\n";
+    std::thread(handleClient, client).detach();
   }
-
-  send(client, message.c_str(), message.length(), 0);
 
   close(server_fd);
 
