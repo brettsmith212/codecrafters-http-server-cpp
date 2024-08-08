@@ -71,6 +71,8 @@ int main(int argc, char **argv) {
   std::cout << "Client connected\n";
 
   char buffer[BUFFER_SIZE];
+  std::memset(buffer, 0, sizeof(buffer));
+
   read(client, buffer, BUFFER_SIZE);
 
   std::string bufferStr = buffer;
@@ -89,12 +91,17 @@ int main(int argc, char **argv) {
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
         std::to_string(echo.length()) + "\r\n\r\n" + echo;
   } else if (path.find("/user-agent") == 0) {
-    std::vector<std::string> userAgentLine = stringToVec(headerLines[3], ' ');
+    std::string userAgentRow = "";
+    for (const auto &line : headerLines) {
+      if (line.find("\nUser-Agent:") == 0) {
+        userAgentRow = line;
+      }
+    }
+    std::vector<std::string> userAgentLine = stringToVec(userAgentRow, ' ');
     std::string userAgent = userAgentLine[1];
     message =
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
         std::to_string(userAgent.length()) + "\r\n\r\n" + userAgent;
-
   } else {
     message = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
