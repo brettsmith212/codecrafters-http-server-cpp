@@ -1,6 +1,8 @@
 #include <arpa/inet.h>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <functional>
 #include <iostream>
 #include <netdb.h>
 #include <sstream>
@@ -27,7 +29,7 @@ std::vector<std::string> stringToVec(std::string &buffer, char delimiter) {
   return linesVec;
 }
 
-void handleClient(int client_fd) {
+void handleClient(int client_fd, std::string &dir) {
   char buffer[BUFFER_SIZE];
   std::memset(buffer, 0, sizeof(buffer));
 
@@ -60,16 +62,37 @@ void handleClient(int client_fd) {
     message =
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
         std::to_string(userAgent.length()) + "\r\n\r\n" + userAgent;
+  } else if (path.find("/files/") == 0) {
+    std::string fileName = path.substr(7);
+    std::ifstream ifs(dir + fileName);
+
+    if (ifs.good()) {
+      std::stringstream content;
+      content << ifs.rdbuf();
+      message = "HTTP/1.1 200 OK\r\nContent-Type: "
+                "application/octet-stream\r\nContent-Length: " +
+                std::to_string(content.str().length()) + "\r\n\r\n" +
+                content.str();
+    } else {
+      message = "HTTP/1.1 404 Not Found\r\n\r\n";
+    }
+
   } else {
     message = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
 
   send(client_fd, message.c_str(), message.length(), 0);
+  close(client_fd);
 }
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
+
+  std::string dir = "";
+  if (argc == 3) {
+    dir = argv[2];
+  }
 
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
@@ -112,7 +135,8 @@ int main(int argc, char **argv) {
                         (socklen_t *)&client_addr_len);
     std::cout << "Client connected\n";
 
-    std::thread(handleClient, client).detach();
+    auto boundHandleClient = std::bind(handleClient, client, dir);
+    std::thread(boundHandleClient).detach();
   }
 
   close(server_fd);
