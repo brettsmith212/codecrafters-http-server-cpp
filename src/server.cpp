@@ -40,43 +40,73 @@ void handleClient(int client_fd, std::string &dir) {
 
   std::vector<std::string> headerRowVec = stringToVec(headerLines[0], ' ');
 
+  std::string command = headerRowVec[0];
   std::string path = headerRowVec[1];
 
   std::string message;
-  if (path == "/") {
-    message = "HTTP/1.1 200 OK\r\n\r\n";
-  } else if (path.find("/echo/") == 0) {
-    std::string echo = path.substr(6);
-    message =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-        std::to_string(echo.length()) + "\r\n\r\n" + echo;
-  } else if (path.find("/user-agent") == 0) {
-    std::string userAgentRow = "";
-    for (const auto &line : headerLines) {
-      if (line.find("\nUser-Agent:") == 0) {
-        userAgentRow = line;
+  if (command == "GET") {
+    if (path == "/") {
+      message = "HTTP/1.1 200 OK\r\n\r\n";
+    } else if (path.find("/echo/") == 0) {
+      std::string echo = path.substr(6);
+      message =
+          "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
+          std::to_string(echo.length()) + "\r\n\r\n" + echo;
+    } else if (path.find("/user-agent") == 0) {
+      std::string userAgentRow = "";
+      for (const auto &line : headerLines) {
+        if (line.find("\nUser-Agent:") == 0) {
+          userAgentRow = line;
+        }
       }
-    }
-    std::vector<std::string> userAgentLine = stringToVec(userAgentRow, ' ');
-    std::string userAgent = userAgentLine[1];
-    message =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-        std::to_string(userAgent.length()) + "\r\n\r\n" + userAgent;
-  } else if (path.find("/files/") == 0) {
-    std::string fileName = path.substr(7);
-    std::ifstream ifs(dir + fileName);
+      std::vector<std::string> userAgentLine = stringToVec(userAgentRow, ' ');
+      std::string userAgent = userAgentLine[1];
+      message =
+          "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
+          std::to_string(userAgent.length()) + "\r\n\r\n" + userAgent;
+    } else if (path.find("/files/") == 0) {
+      std::string fileName = path.substr(7);
+      std::ifstream ifs(dir + fileName);
 
-    if (ifs.good()) {
-      std::stringstream content;
-      content << ifs.rdbuf();
-      message = "HTTP/1.1 200 OK\r\nContent-Type: "
-                "application/octet-stream\r\nContent-Length: " +
-                std::to_string(content.str().length()) + "\r\n\r\n" +
-                content.str();
+      if (ifs.good()) {
+        std::stringstream content;
+        content << ifs.rdbuf();
+        message = "HTTP/1.1 200 OK\r\nContent-Type: "
+                  "application/octet-stream\r\nContent-Length: " +
+                  std::to_string(content.str().length()) + "\r\n\r\n" +
+                  content.str();
+      } else {
+        message = "HTTP/1.1 404 Not Found\r\n\r\n";
+      }
+
     } else {
       message = "HTTP/1.1 404 Not Found\r\n\r\n";
     }
+  } else if (command == "POST") {
+    if (path.find("/files/") == 0) {
+      std::string contentLength = "";
+      for (const auto &line : headerLines) {
+        if (line.find("\nContent-Length:") == 0) {
+          contentLength = line;
+        }
+      }
+      std::vector<std::string> contentLengthLine =
+          stringToVec(contentLength, ' ');
+      std::string len = contentLengthLine[1];
 
+      std::string fileName = path.substr(7);
+      std::ofstream ofs(dir + fileName);
+
+      std::string untrimmedContent = headerLines.back();
+      std::string content = untrimmedContent.substr(1, std::stoi(len));
+      ofs << content;
+
+      ofs.close();
+
+      message = "HTTP/1.1 201 Created\r\n\r\n";
+    } else {
+      message = "HTTP/1.1 404 Not Found\r\n\r\n";
+    }
   } else {
     message = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
