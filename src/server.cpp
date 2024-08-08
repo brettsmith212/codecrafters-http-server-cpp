@@ -3,10 +3,29 @@
 #include <cstring>
 #include <iostream>
 #include <netdb.h>
+#include <sstream>
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vector>
+
+const int BUFFER_SIZE = 1024;
+
+std::vector<std::string> parseHeaderString(std::string &buffer,
+                                           char delimiter) {
+  std::stringstream ss(buffer);
+  std::vector<std::string> linesVec;
+
+  std::string line;
+  while (std::getline(ss, line, delimiter)) {
+    if (!line.empty()) {
+      linesVec.push_back(line);
+    }
+  }
+
+  return linesVec;
+}
 
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
@@ -52,7 +71,23 @@ int main(int argc, char **argv) {
                       (socklen_t *)&client_addr_len);
   std::cout << "Client connected\n";
 
-  std::string message = "HTTP/1.1 200 OK\r\n\r\n";
+  char buffer[BUFFER_SIZE];
+  read(client, buffer, sizeof(buffer));
+
+  std::string bufferStr = buffer;
+  std::vector<std::string> headerLines = parseHeaderString(bufferStr, '\r');
+
+  std::vector<std::string> headerRowVec =
+      parseHeaderString(headerLines[0], ' ');
+
+  std::string path = headerRowVec[1];
+
+  std::string message;
+  if (path == "/") {
+    message = "HTTP/1.1 200 OK\r\n\r\n";
+  } else {
+    message = "HTTP/1.1 404 Not Found\r\n\r\n";
+  }
 
   send(client, message.c_str(), message.length(), 0);
 
